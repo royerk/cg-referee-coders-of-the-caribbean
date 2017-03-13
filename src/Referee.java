@@ -494,8 +494,7 @@ class Referee {
 	return 1;
     }
 
-    protected void handlePlayerOutput(int frame, int round, int playerIdx, String[] outputs)
-	    throws WinException, LostException, InvalidInputException {
+    protected void handlePlayerOutput(int frame, int round, int playerIdx, String[] outputs) throws LostException, InvalidInputException {
 
 	Player player = this.players[playerIdx];
 	player.lastBombActions.clear();
@@ -858,26 +857,78 @@ class Referee {
 	out.println("ready");
 
 	Scanner in = new Scanner(is);
-
-	in.nextLine();
-
+	
+	out.println("###Init 0");
 	for (String line : getInitInputForPlayer(0)) {
 	    out.println(line);
 	}
 	
-	in.nextLine();
-	
-	for (String line : getInitInputForPlayer(0)) {
+	out.println("###Init 1");
+	for (String line : getInitInputForPlayer(1)) {
 	    out.println(line);
 	}
 	
 	int round = 0;
 	
 	while (round < getMaxRoundCount(2)) {
+	    out.println("###Input 0");
+	    for (String line : getInputForPlayer(round, 0)) {
+		out.println(line);
+	    }
 	    
+	    out.println("###Output 0");
+	    try {
+		handlePlayerOutput(0, round, 0, new String[] { in.nextLine() });
+	    } catch (LostException e) {
+		out.println("###Dead 0 Lost");
+		players[0].setDead();
+	    } catch (InvalidInputException e) {
+		out.println("###Dead 0 InvalidInput");
+		players[0].setDead();
+	    }
+	    
+	    out.println("###Input 1");
+	    for (String line : getInputForPlayer(round, 1)) {
+		out.println(line);
+	    }
+	    
+	    out.println("###Output 1");
+	    try {
+		handlePlayerOutput(0, round, 1, new String[] { in.nextLine() });
+	    } catch (LostException e) {
+		out.println("###Dead 1 Lost");
+		players[0].setDead();
+	    } catch (InvalidInputException e) {
+		out.println("###Dead 1 InvalidInput");
+		players[0].setDead();
+	    }
+	    
+	    try {
+		updateGame(round);
+	    } catch (GameOverException e) {
+		if (players[0].score > players[1].score) {
+		    out.println("###Win 0");
+		} else if (players[0].score < players[1].score) {
+		    out.println("###Win 1");
+		} else {
+		    out.println("###Draw");
+		}
+		
+		return;
+	    }
 	    
 	    round += 1;
 	}
+	
+	if (players[0].score > players[1].score) {
+	    out.println("###Win 0");
+	} else if (players[0].score < players[1].score) {
+	    out.println("###Win 1");
+	} else {
+	    out.println("###Draw");
+	}
+	
+	in.close();
     }
 
     public static void main(String... args) throws IOException {
