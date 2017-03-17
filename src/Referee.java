@@ -855,8 +855,6 @@ class Referee {
     public Referee(InputStream is, PrintStream out, PrintStream err) throws IOException {
 	initReferee(2, new Properties());
 
-	out.println("ready");
-
 	Scanner in = new Scanner(is);
 
 	try {
