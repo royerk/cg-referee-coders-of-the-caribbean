@@ -860,12 +860,12 @@ class Referee {
 	Scanner in = new Scanner(is);
 
 	try {
-	    out.println("###Init 0");
+	    out.println("###Input 0");
 	    for (String line : getInitInputForPlayer(0)) {
 		out.println(line);
 	    }
 
-	    out.println("###Init 1");
+	    out.println("###Input 1");
 	    for (String line : getInitInputForPlayer(1)) {
 		out.println(line);
 	    }
@@ -909,11 +909,11 @@ class Referee {
 		    updateGame(round);
 		} catch (GameOverException e) {
 		    if (players[0].score > players[1].score) {
-			out.println("###Win 0");
+			out.println("###End 0 1");
 		    } else if (players[0].score < players[1].score) {
-			out.println("###Win 1");
+			out.println("###End 1 0");
 		    } else {
-			out.println("###Draw");
+			out.println("###Draw 0 1");
 		    }
 
 		    return;
@@ -923,11 +923,11 @@ class Referee {
 	    }
 
 	    if (players[0].score > players[1].score) {
-		out.println("###Win 0");
+		out.println("###End 0 1");
 	    } else if (players[0].score < players[1].score) {
-		out.println("###Win 1");
+		out.println("###End 1 0");
 	    } else {
-		out.println("###Draw");
+		out.println("###Draw 0 1");
 	    }
 	} finally {
 	    in.close();
