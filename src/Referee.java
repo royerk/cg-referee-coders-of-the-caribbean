@@ -876,14 +876,14 @@ class Referee {
 		    out.println(line);
 		}
 
-		out.println("###Output 0");
+		out.println("###Output 0 1");
 		try {
 		    handlePlayerOutput(0, round, 0, new String[] { in.nextLine() });
 		} catch (LostException e) {
-		    out.println("###Dead 0 Lost " + e.getMessage());
+		    err.println("###Dead 0 Lost " + e.getMessage());
 		    players[0].setDead();
 		} catch (InvalidInputException e) {
-		    out.println("###Dead 0 InvalidInput " + e.getMessage());
+		    err.println("###Dead 0 InvalidInput " + e.getMessage());
 		    players[0].setDead();
 		}
 
@@ -892,15 +892,15 @@ class Referee {
 		    out.println(line);
 		}
 
-		out.println("###Output 1");
+		out.println("###Output 1 1");
 		try {
 		    handlePlayerOutput(0, round, 1, new String[] { in.nextLine() });
 		} catch (LostException e) {
-		    out.println("###Dead 1 Lost " + e.getMessage());
-		    players[0].setDead();
+		    err.println("###Dead 1 Lost " + e.getMessage());
+		    players[1].setDead();
 		} catch (InvalidInputException e) {
-		    out.println("###Dead 1 InvalidInput " + e.getMessage());
-		    players[0].setDead();
+		    err.println("###Dead 1 InvalidInput " + e.getMessage());
+		    players[1].setDead();
 		}
 
 		try {
@@ -911,7 +911,7 @@ class Referee {
 		    } else if (players[0].score < players[1].score) {
 			out.println("###End 1 0");
 		    } else {
-			out.println("###Draw 0 1");
+			out.println("###End 01");
 		    }
 
 		    return;
@@ -925,7 +925,7 @@ class Referee {
 	    } else if (players[0].score < players[1].score) {
 		out.println("###End 1 0");
 	    } else {
-		out.println("###Draw 0 1");
+		out.println("###End 01");
 	    }
 	} finally {
 	    in.close();
