@@ -581,7 +581,7 @@ class Referee {
 			}
 			player.message = message;
 		    } else {
-			throw new InvalidInputException("A valid action", action);
+			throw new InvalidInputException("Invalid action", action);
 		    }
 		}
 	    }
@@ -880,10 +880,10 @@ class Referee {
 		try {
 		    handlePlayerOutput(0, round, 0, new String[] { in.nextLine() });
 		} catch (LostException e) {
-		    err.println("###Dead 0 Lost " + e.getMessage());
+		    err.println("###Error 0 Lost " + e.getMessage());
 		    players[0].setDead();
 		} catch (InvalidInputException e) {
-		    err.println("###Dead 0 InvalidInput " + e.getMessage());
+		    err.println("###Error 0 InvalidInput " + e.getMessage());
 		    players[0].setDead();
 		}
 
@@ -896,10 +896,10 @@ class Referee {
 		try {
 		    handlePlayerOutput(0, round, 1, new String[] { in.nextLine() });
 		} catch (LostException e) {
-		    err.println("###Dead 1 Lost " + e.getMessage());
+		    err.println("###Error 1 Lost " + e.getMessage());
 		    players[1].setDead();
 		} catch (InvalidInputException e) {
-		    err.println("###Dead 1 InvalidInput " + e.getMessage());
+		    err.println("###Error 1 InvalidInput " + e.getMessage());
 		    players[1].setDead();
 		}
 
