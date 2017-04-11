@@ -856,8 +856,11 @@ class Referee {
 	initReferee(2, new Properties());
 
 	Scanner in = new Scanner(is);
-
+	
 	try {
+	    // Read ###Start 2
+	    in.nextLine();
+	    
 	    out.println("###Input 0");
 	    for (String line : getInitInputForPlayer(0)) {
 		out.println(line);
