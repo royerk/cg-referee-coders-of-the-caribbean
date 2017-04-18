@@ -1,941 +1,1369 @@
-import java.awt.Point;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
-import java.util.*;
+import java.io.PrintWriter;
+import java.io.StringReader;
+import java.io.StringWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map.Entry;
+import java.util.Properties;
+import java.util.Random;
+import java.util.Scanner;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class Referee {
+	private static final int LEAGUE_LEVEL = 3;
 
-    private static final int LEAGUE_LEVEL = 3;
+	private static final int MAP_WIDTH = 23;
+	private static final int MAP_HEIGHT = 21;
+	private static final int COOLDOWN_CANNON = 2;
+	private static final int COOLDOWN_MINE = 5;
+	private static final int INITIAL_SHIP_HEALTH = 100;
+	private static final int MAX_SHIP_HEALTH = 100;
+	private static final int MAX_SHIP_SPEED;
+	private static final int MIN_SHIPS = 1;
+	private static final int MAX_SHIPS;
+	private static final int MIN_MINES;
+	private static final int MAX_MINES;
+	private static final int MIN_RUM_BARRELS = 10;
+	private static final int MAX_RUM_BARRELS = 26;
+	private static final int MIN_RUM_BARREL_VALUE = 10;
+	private static final int MAX_RUM_BARREL_VALUE = 20;
+	private static final int REWARD_RUM_BARREL_VALUE = 30;
+	private static final int MINE_VISIBILITY_RANGE = 5;
+	private static final int FIRE_DISTANCE_MAX = 10;
+	private static final int LOW_DAMAGE = 25;
+	private static final int HIGH_DAMAGE = 50;
+	private static final int MINE_DAMAGE = 25;
+	private static final int NEAR_MINE_DAMAGE = 10;
+	private static final boolean CANNONS_ENABLED;
+	private static final boolean MINES_ENABLED;
 
-    private static final int MIN_FACTORY_COUNT = 7;
-    private static final int MAX_FACTORY_COUNT;
-    private static final int MIN_PRODUCTION_RATE = 0;
-    private static final int MAX_PRODUCTION_RATE = 3;
-    private static final int MIN_TOTAL_PRODUCTION_RATE = 4;
-    private static final int BOMBS_PER_PLAYER;
-    private static final int PLAYER_INIT_UNITS_MIN = 15;
-    private static final int PLAYER_INIT_UNITS_MAX = 30;
-    private static final int WIDTH = 16000;
-    private static final int HEIGHT = 6500;
-    private static final int EXTRA_SPACE_BETWEEN_FACTORIES = 300;
-    private static final int COST_INCREASE_PRODUCTION = 10;
-    private static final int DAMAGE_DURATION = 5;
-    private static final boolean MOVE_RESTRICTION_ENABLED;
-    private static final boolean INCREASE_ACTION_ENABLED;
-    private static int FACTORY_RADIUS;
-
-    private static final Pattern PLAYER_INPUT_MOVE_PATTERN = Pattern.compile(
-	    "MOVE (?<src>[0-9]{1,8})\\s+(?<dst>[0-9]{1,8})\\s+(?<units>([0-9]{1,8}))", Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLAYER_INPUT_WAIT_PATTERN = Pattern.compile("WAIT", Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLAYER_INPUT_MSG_PATTERN = Pattern.compile("MSG (?<message>.*)",
-	    Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLAYER_INPUT_BOMB_PATTERN = Pattern
-	    .compile("BOMB (?<src>[0-9]{1,8})\\s+(?<dst>[0-9]{1,8})", Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLAYER_INPUT_INC_PATTERN = Pattern.compile("INC (?<src>[0-9]{1,8})",
-	    Pattern.CASE_INSENSITIVE);
-    private static final Pattern PLAYER_INPUT_ACTION_SEPARATOR_PATTERN = Pattern
-	    .compile("\\s*;\\s*(?=WAIT|MOVE|BOMB|INC|MSG)", Pattern.CASE_INSENSITIVE);
-
-    static {
-	switch (LEAGUE_LEVEL) {
-	case 0: // Wood 3: only one move / turn, few factories
-	    MAX_FACTORY_COUNT = 9;
-	    MOVE_RESTRICTION_ENABLED = true;
-	    BOMBS_PER_PLAYER = 0;
-	    INCREASE_ACTION_ENABLED = false;
-	    break;
-	case 1: // Wood 2: multiple actions / turn, more factories
-	    MAX_FACTORY_COUNT = 15;
-	    MOVE_RESTRICTION_ENABLED = false;
-	    BOMBS_PER_PLAYER = 0;
-	    INCREASE_ACTION_ENABLED = false;
-	    break;
-	case 2: // Wood 1: add bombs
-	    MAX_FACTORY_COUNT = 15;
-	    MOVE_RESTRICTION_ENABLED = false;
-	    BOMBS_PER_PLAYER = 2;
-	    INCREASE_ACTION_ENABLED = false;
-	    break;
-	default: // Other leagues: add increase action
-	    MAX_FACTORY_COUNT = 15;
-	    MOVE_RESTRICTION_ENABLED = false;
-	    BOMBS_PER_PLAYER = 2;
-	    INCREASE_ACTION_ENABLED = true;
-	}
-    }
-
-    private Player[] players;
-    private Factory[] factories;
-    private List<Troop> troops;
-    private List<Troop> newTroops;
-    private List<Bomb> bombs;
-    private List<Bomb> newBombs;
-    private Random random;
-
-    // Properties
-    private long seed;
-    private Integer customFactoryCount;
-    private Integer customInitialUnitCount;
-
-    private static enum EntityType {
-	FACTORY("FACTORY"), TROOP("TROOP"), BOMB("BOMB");
-
-	private String name;
-
-	private EntityType(final String name) {
-	    this.name = name;
-	}
-
-	@Override
-	public String toString() {
-	    return this.name;
-	}
-    }
-
-    private static class Player {
-	private int id;
-	private List<MoveAction> lastMoveActions;
-	private List<BombAction> lastBombActions;
-	private List<IncAction> lastIncActions;
-	private String message;
-	private int score;
-	private Factory[] factories;
-	private List<Troop> troops;
-	private int remainingBombs;
-
-	public Player(int id) {
-	    this.id = id;
-	    this.score = 0;
-	    this.remainingBombs = BOMBS_PER_PLAYER;
-	    this.lastMoveActions = new ArrayList<>();
-	    this.lastBombActions = new ArrayList<>();
-	    this.lastIncActions = new ArrayList<>();
-	}
-
-	public void setDead() {
-	    // When a player is dead, it loses its factories and troops
-	    for (Factory factory : factories) {
-		if (factory.owner == this) {
-		    factory.owner = null;
+	static {
+		switch (LEAGUE_LEVEL) {
+			case 0: // 1 ship / no mines / speed 1
+				MAX_SHIPS = 1;
+				CANNONS_ENABLED = false;
+				MINES_ENABLED = false;
+				MIN_MINES = 0;
+				MAX_MINES = 0;
+				MAX_SHIP_SPEED = 1;
+				break;
+			case 1: // add mines
+				MAX_SHIPS = 1;
+				CANNONS_ENABLED = true;
+				MINES_ENABLED = true;
+				MIN_MINES = 5;
+				MAX_MINES = 10;
+				MAX_SHIP_SPEED = 1;
+				break;
+			case 2: // 3 ships max
+				MAX_SHIPS = 3;
+				CANNONS_ENABLED = true;
+				MINES_ENABLED = true;
+				MIN_MINES = 5;
+				MAX_MINES = 10;
+				MAX_SHIP_SPEED = 1;
+				break;
+			default: // increase max speed
+				MAX_SHIPS = 3;
+				CANNONS_ENABLED = true;
+				MINES_ENABLED = true;
+				MIN_MINES = 5;
+				MAX_MINES = 10;
+				MAX_SHIP_SPEED = 2;
+				break;
 		}
-	    }
-	    for (Iterator<Troop> it = troops.iterator(); it.hasNext();) {
-		Troop troop = it.next();
-		if (troop.owner == this) {
-		    it.remove();
+	}
+
+	private static final Pattern PLAYER_INPUT_MOVE_PATTERN = Pattern.compile("MOVE (?<x>-?[0-9]{1,8})\\s+(?<y>-?[0-9]{1,8})(?:\\s+(?<message>.+))?",
+			Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_SLOWER_PATTERN = Pattern.compile("SLOWER(?:\\s+(?<message>.+))?", Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_FASTER_PATTERN = Pattern.compile("FASTER(?:\\s+(?<message>.+))?", Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_WAIT_PATTERN = Pattern.compile("WAIT(?:\\s+(?<message>.+))?", Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_PORT_PATTERN = Pattern.compile("PORT(?:\\s+(?<message>.+))?", Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_STARBOARD_PATTERN = Pattern.compile("STARBOARD(?:\\s+(?<message>.+))?", Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_FIRE_PATTERN = Pattern.compile("FIRE (?<x>[0-9]{1,8})\\s+(?<y>[0-9]{1,8})(?:\\s+(?<message>.+))?",
+			Pattern.CASE_INSENSITIVE);
+	private static final Pattern PLAYER_INPUT_MINE_PATTERN = Pattern.compile("MINE(?:\\s+(?<message>.+))?", Pattern.CASE_INSENSITIVE);
+
+	public static int clamp(int val, int min, int max) {
+		return Math.max(min, Math.min(max, val));
+	}
+
+	@SafeVarargs
+	static final <T> String join(T... v) {
+		return Stream.of(v).map(String::valueOf).collect(Collectors.joining(" "));
+	}
+
+	public static class Coord {
+		private final static int[][] DIRECTIONS_EVEN = new int[][] { { 1, 0 }, { 0, -1 }, { -1, -1 }, { -1, 0 }, { -1, 1 }, { 0, 1 } };
+		private final static int[][] DIRECTIONS_ODD = new int[][] { { 1, 0 }, { 1, -1 }, { 0, -1 }, { -1, 0 }, { 0, 1 }, { 1, 1 } };
+		private final int x;
+		private final int y;
+
+		public Coord(int x, int y) {
+			this.x = x;
+			this.y = y;
 		}
-	    }
-	    this.score = 0;
-	}
 
-	public void setTroops(List<Troop> troops) {
-	    this.troops = troops;
-	}
-
-	public void setFactories(Factory[] factories) {
-	    this.factories = factories;
-	}
-    }
-
-    private static abstract class Action {
-    }
-
-    private static class MoveAction extends Action {
-	private Factory src;
-	private Factory dst;
-	private int units;
-
-	public MoveAction(Factory src, Factory dst, int units) {
-	    this.src = src;
-	    this.dst = dst;
-	    this.units = units;
-	}
-    }
-
-    private static class BombAction extends Action {
-	private Factory src;
-	private Factory dst;
-
-	public BombAction(Factory src, Factory dst) {
-	    this.src = src;
-	    this.dst = dst;
-	}
-    }
-
-    private static class IncAction extends Action {
-	private Factory src;
-
-	public IncAction(Factory src) {
-	    this.src = src;
-	}
-    }
-
-    private static abstract class Entity {
-	private static int UNIQUE_ENTITY_ID = 0;
-
-	protected final int id;
-	protected final EntityType type;
-
-	public Entity(EntityType type) {
-	    this.id = UNIQUE_ENTITY_ID++;
-	    this.type = type;
-	}
-
-	public abstract String toPlayerString(int playerIdx);
-
-	protected String toPlayerString(int arg1, int arg2, int arg3, int arg4, int arg5) {
-	    return id + " " + type + " " + arg1 + " " + arg2 + " " + arg3 + " " + arg4 + " " + arg5;
-	}
-    }
-
-    private static class Factory extends Entity {
-	private Player owner;
-	private Point position;
-	private int unitCount;
-	private int productionRate;
-	private int disabled;
-	private Map<Integer, Integer> distances;
-
-	private int[] unitsReadyToFight = { 0, 0 };
-
-	public Factory(Player owner, int x, int y, int unitCount, int productionRate) {
-	    super(EntityType.FACTORY);
-	    this.owner = owner;
-	    this.position = new Point(x, y);
-	    this.unitCount = unitCount;
-	    this.productionRate = productionRate;
-	}
-
-	public void computeDistances(Factory[] factories) {
-	    distances = new LinkedHashMap<>();
-	    for (Factory factory : factories) {
-		if (this != factory) {
-		    distances.put(factory.id, (int) Math
-			    .round((position.distance(factory.position) - getRadius() - factory.getRadius()) / 800.));
+		public Coord(Coord other) {
+			this.x = other.x;
+			this.y = other.y;
 		}
-	    }
-	}
 
-	public int getDistanceTo(Factory factory) {
-	    return distances.get(factory.id);
-	}
-
-	public int getRadius() {
-	    return FACTORY_RADIUS;
-	}
-
-	public int getCurrentProductionRate() {
-	    return (disabled == 0) ? this.productionRate : 0;
-	}
-
-	@Override
-	public String toPlayerString(int playerIdx) {
-	    int ownerShip = 0;
-	    if (owner != null) {
-		ownerShip = (playerIdx == owner.id) ? 1 : -1;
-	    }
-	    return toPlayerString(ownerShip, unitCount, this.productionRate, disabled, 0);
-	}
-
-	public String toViewStringInit() {
-	    return id + " " + this.productionRate + " " + position.x + " " + position.y + " " + getRadius();
-	}
-
-	public String toViewString() {
-	    return (owner == null ? "-1" : owner.id) + " " + unitCount + " " + this.productionRate + " " + disabled;
-	}
-    }
-
-    private static abstract class MovingEntity extends Entity {
-	protected Player owner;
-	protected int remainingTurns;
-	protected Factory source;
-	protected Factory destination;
-
-	public MovingEntity(EntityType type, Factory source, Factory destination) {
-	    super(type);
-	    this.owner = source.owner;
-	    this.source = source;
-	    this.destination = destination;
-	    this.remainingTurns = source.getDistanceTo(destination);
-	}
-
-	public void move() {
-	    this.remainingTurns--;
-	}
-
-	public <A extends MovingEntity> A findWithSameRouteInList(List<A> list) {
-	    for (A other : list) {
-		if (other.source == this.source && other.destination == this.destination) {
-		    return other;
+		public double angle(Coord targetPosition) {
+			double dy = (targetPosition.y - this.y) * Math.sqrt(3) / 2;
+			double dx = targetPosition.x - this.x + ((this.y - targetPosition.y) & 1) * 0.5;
+			double angle = -Math.atan2(dy, dx) * 3 / Math.PI;
+			if (angle < 0) {
+				angle += 6;
+			} else if (angle >= 6) {
+				angle -= 6;
+			}
+			return angle;
 		}
-	    }
-	    return null;
-	}
-    }
 
-    private static class Bomb extends MovingEntity {
-	public Bomb(Factory source, Factory destination) {
-	    super(EntityType.BOMB, source, destination);
-	}
-
-	@Override
-	public String toPlayerString(int playerIdx) {
-	    if (owner.id == playerIdx) {
-		return toPlayerString(1, source.id, destination.id, remainingTurns, 0);
-	    } else {
-		return toPlayerString(-1, source.id, -1, -1, 0);
-	    }
-	}
-
-	public String toViewString() {
-	    return id + " " + (owner == null ? 0 : (owner.id)) + " " + source.id + " " + destination.id + " "
-		    + remainingTurns;
-	}
-
-	public void explode() {
-	    int damage = Math.min(destination.unitCount, Math.max(10, destination.unitCount / 2));
-	    destination.unitCount -= damage;
-	    destination.disabled = DAMAGE_DURATION;
-	}
-    }
-
-    private static class Troop extends MovingEntity {
-	private int unitCount;
-
-	public Troop(Factory source, Factory destination, int unitCount) {
-	    super(EntityType.TROOP, source, destination);
-	    this.unitCount = unitCount;
-	}
-
-	@Override
-	public String toPlayerString(int playerIdx) {
-	    int ownerShip = 0;
-	    if (owner != null) {
-		ownerShip = (playerIdx == owner.id) ? 1 : -1;
-	    }
-	    return toPlayerString(ownerShip, source.id, destination.id, unitCount, remainingTurns);
-	}
-
-	public String toViewString() {
-	    return id + " " + (owner == null ? 0 : (owner.id)) + " " + source.id + " " + destination.id + " "
-		    + unitCount + " " + remainingTurns;
-	}
-    }
-
-    protected void initReferee(int playerCount, Properties prop) {
-	this.seed = Long
-		.valueOf(prop.getProperty("seed", String.valueOf(new Random(System.currentTimeMillis()).nextLong())));
-	String factoryCount = prop.getProperty("factory_count");
-	if (factoryCount != null) {
-	    this.customFactoryCount = Integer.valueOf(factoryCount);
-	}
-	String initialUnitCount = prop.getProperty("initial_unit_count");
-	if (initialUnitCount != null) {
-	    this.customInitialUnitCount = Integer.valueOf(initialUnitCount);
-	}
-
-	newTroops = new ArrayList<>();
-	newBombs = new ArrayList<>();
-
-	this.random = new Random(seed);
-	generatePlayers(playerCount);
-	generateFactories();
-
-	this.troops = new LinkedList<>();
-	this.bombs = new LinkedList<>();
-
-	for (Player player : players) {
-	    player.setTroops(troops);
-	    player.setFactories(factories);
-	}
-    }
-
-    void generatePlayers(int playerCount) {
-	this.players = new Player[playerCount];
-	for (int i = 0; i < playerCount; i++) {
-	    this.players[i] = new Player(i);
-	}
-    }
-
-    /**
-     * Generate the factory objects
-     */
-    void generateFactories() {
-	int factoryCount;
-	if (customFactoryCount != null && customFactoryCount >= MIN_FACTORY_COUNT
-		&& customFactoryCount <= MAX_FACTORY_COUNT) {
-	    factoryCount = customFactoryCount;
-	} else {
-	    factoryCount = MIN_FACTORY_COUNT + this.random.nextInt(MAX_FACTORY_COUNT - MIN_FACTORY_COUNT + 1);
-	}
-
-	if (factoryCount % 2 == 0) { // factoryCount must be odd
-	    factoryCount++;
-	}
-	FACTORY_RADIUS = factoryCount > 10 ? 600 : 700;
-
-	int minSpaceBetweenFactories = 2 * (FACTORY_RADIUS + EXTRA_SPACE_BETWEEN_FACTORIES);
-
-	this.factories = new Factory[factoryCount];
-
-	int i = 0;
-
-	// Add one factory at the center of the map
-	this.factories[i++] = new Factory(null, WIDTH / 2, HEIGHT / 2, 0, 0);
-
-	while (i < factoryCount - 1) {
-	    int x = random.nextInt(WIDTH / 2 - 2 * FACTORY_RADIUS) + FACTORY_RADIUS + EXTRA_SPACE_BETWEEN_FACTORIES;
-	    int y = random.nextInt(HEIGHT - 2 * FACTORY_RADIUS) + FACTORY_RADIUS + EXTRA_SPACE_BETWEEN_FACTORIES;
-
-	    boolean valid = true;
-	    for (int j = 0; j < i; j++) {
-		Factory factory = this.factories[j];
-		if (factory.position.distance(x, y) < minSpaceBetweenFactories) {
-		    valid = false;
-		    break;
+		CubeCoordinate toCubeCoordinate() {
+			int xp = x - (y - (y & 1)) / 2;
+			int zp = y;
+			int yp = -(xp + zp);
+			return new CubeCoordinate(xp, yp, zp);
 		}
-	    }
 
-	    if (valid) {
-		int productionRate = MIN_PRODUCTION_RATE
-			+ random.nextInt(MAX_PRODUCTION_RATE - MIN_PRODUCTION_RATE + 1);
+		Coord neighbor(int orientation) {
+			int newY, newX;
+			if (this.y % 2 == 1) {
+				newY = this.y + DIRECTIONS_ODD[orientation][1];
+				newX = this.x + DIRECTIONS_ODD[orientation][0];
+			} else {
+				newY = this.y + DIRECTIONS_EVEN[orientation][1];
+				newX = this.x + DIRECTIONS_EVEN[orientation][0];
+			}
 
-		if (i == 1) {
-		    int unitCount;
-		    if (customInitialUnitCount != null && customInitialUnitCount >= PLAYER_INIT_UNITS_MIN
-			    && customInitialUnitCount <= PLAYER_INIT_UNITS_MAX) {
-			unitCount = customInitialUnitCount;
-		    } else {
-			unitCount = PLAYER_INIT_UNITS_MIN
-				+ random.nextInt(PLAYER_INIT_UNITS_MAX - PLAYER_INIT_UNITS_MIN + 1);
-		    }
-		    this.factories[i++] = new Factory(players[0], x, y, unitCount, productionRate);
-		    this.factories[i++] = new Factory(players[1], WIDTH - x, HEIGHT - y, unitCount, productionRate);
+			return new Coord(newX, newY);
+		}
+
+		boolean isInsideMap() {
+			return x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
+		}
+
+		int distanceTo(Coord dst) {
+			return this.toCubeCoordinate().distanceTo(dst.toCubeCoordinate());
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (obj == null || getClass() != obj.getClass()) {
+				return false;
+			}
+			Coord other = (Coord) obj;
+			return y == other.y && x == other.x;
+		}
+
+		@Override
+		public String toString() {
+			return join(x, y);
+		}
+	}
+
+	public static class CubeCoordinate {
+		static int[][] directions = new int[][] { { 1, -1, 0 }, { +1, 0, -1 }, { 0, +1, -1 }, { -1, +1, 0 }, { -1, 0, +1 }, { 0, -1, +1 } };
+		int x, y, z;
+
+		public CubeCoordinate(int x, int y, int z) {
+			this.x = x;
+			this.y = y;
+			this.z = z;
+		}
+
+		Coord toOffsetCoordinate() {
+			int newX = x + (z - (z & 1)) / 2;
+			int newY = z;
+			return new Coord(newX, newY);
+		}
+
+		CubeCoordinate neighbor(int orientation) {
+			int nx = this.x + directions[orientation][0];
+			int ny = this.y + directions[orientation][1];
+			int nz = this.z + directions[orientation][2];
+
+			return new CubeCoordinate(nx, ny, nz);
+		}
+
+		int distanceTo(CubeCoordinate dst) {
+			return (Math.abs(x - dst.x) + Math.abs(y - dst.y) + Math.abs(z - dst.z)) / 2;
+		}
+
+		@Override
+		public String toString() {
+			return join(x, y, z);
+		}
+	}
+
+	private static enum EntityType {
+		SHIP, BARREL, MINE, CANNONBALL
+	}
+
+	public static abstract class Entity {
+		private static int UNIQUE_ENTITY_ID = 0;
+
+		protected final int id;
+		protected final EntityType type;
+		protected Coord position;
+
+		public Entity(EntityType type, int x, int y) {
+			this.id = UNIQUE_ENTITY_ID++;
+			this.type = type;
+			this.position = new Coord(x, y);
+		}
+
+		public String toViewString() {
+			return join(id, position.y, position.x);
+		}
+
+		protected String toPlayerString(int arg1, int arg2, int arg3, int arg4) {
+			return join(id, type.name(), position.x, position.y, arg1, arg2, arg3, arg4);
+		}
+	}
+
+	public static class Mine extends Entity {
+		public Mine(int x, int y) {
+			super(EntityType.MINE, x, y);
+		}
+
+		public String toPlayerString(int playerIdx) {
+			return toPlayerString(0, 0, 0, 0);
+		}
+
+		public List<Damage> explode(List<Ship> ships, boolean force) {
+			List<Damage> damage = new ArrayList<>();
+			Ship victim = null;
+
+			for (Ship ship : ships) {
+				if (position.equals(ship.bow()) || position.equals(ship.stern()) || position.equals(ship.position)) {
+					damage.add(new Damage(this.position, MINE_DAMAGE, true));
+					ship.damage(MINE_DAMAGE);
+					victim = ship;
+				}
+			}
+
+			if (force || victim != null) {
+				if (victim == null) {
+					damage.add(new Damage(this.position, MINE_DAMAGE, true));
+				}
+
+				for (Ship ship : ships) {
+					if (ship != victim) {
+						Coord impactPosition = null;
+						if (ship.stern().distanceTo(position) <= 1) {
+							impactPosition = ship.stern();
+						}
+						if (ship.bow().distanceTo(position) <= 1) {
+							impactPosition = ship.bow();
+						}
+						if (ship.position.distanceTo(position) <= 1) {
+							impactPosition = ship.position;
+						}
+
+						if (impactPosition != null) {
+							ship.damage(NEAR_MINE_DAMAGE);
+							damage.add(new Damage(impactPosition, NEAR_MINE_DAMAGE, true));
+						}
+					}
+				}
+			}
+
+			return damage;
+		}
+	}
+
+	public static class Cannonball extends Entity {
+		final int ownerEntityId;
+		final int srcX;
+		final int srcY;
+		final int initialRemainingTurns;
+		int remainingTurns;
+
+		public Cannonball(int row, int col, int ownerEntityId, int srcX, int srcY, int remainingTurns) {
+			super(EntityType.CANNONBALL, row, col);
+			this.ownerEntityId = ownerEntityId;
+			this.srcX = srcX;
+			this.srcY = srcY;
+			this.initialRemainingTurns = this.remainingTurns = remainingTurns;
+		}
+
+		public String toViewString() {
+			return join(id, position.y, position.x, srcY, srcX, initialRemainingTurns, remainingTurns, ownerEntityId);
+		}
+
+		public String toPlayerString(int playerIdx) {
+			return toPlayerString(ownerEntityId, remainingTurns, 0, 0);
+		}
+	}
+
+	public static class RumBarrel extends Entity {
+		private int health;
+
+		public RumBarrel(int x, int y, int health) {
+			super(EntityType.BARREL, x, y);
+			this.health = health;
+		}
+
+		public String toViewString() {
+			return join(id, position.y, position.x, health);
+		}
+
+		public String toPlayerString(int playerIdx) {
+			return toPlayerString(health, 0, 0, 0);
+		}
+	}
+
+	public static class Damage {
+		private final Coord position;
+		private final int health;
+		private final boolean hit;
+
+		public Damage(Coord position, int health, boolean hit) {
+			this.position = position;
+			this.health = health;
+			this.hit = hit;
+		}
+
+		public String toViewString() {
+			return join(position.y, position.x, health, (hit ? 1 : 0));
+		}
+	}
+
+	public static enum Action {
+		FASTER, SLOWER, PORT, STARBOARD, FIRE, MINE
+	}
+
+	public static class Ship extends Entity {
+		int orientation;
+		int speed;
+		int health;
+		int initialHealth;
+		int owner;
+		String message;
+		Action action;
+		int mineCooldown;
+		int cannonCooldown;
+		Coord target;
+		public int newOrientation;
+		public Coord newPosition;
+		public Coord newBowCoordinate;
+		public Coord newSternCoordinate;
+
+		public Ship(int x, int y, int orientation, int owner) {
+			super(EntityType.SHIP, x, y);
+			this.orientation = orientation;
+			this.speed = 0;
+			this.health = INITIAL_SHIP_HEALTH;
+			this.owner = owner;
+		}
+
+		public String toViewString() {
+			return join(id, position.y, position.x, orientation, health, speed, (action != null ? action : "WAIT"), bow().y, bow().x, stern().y,
+					stern().x, " ;" + (message != null ? message : ""));
+		}
+
+		public String toPlayerString(int playerIdx) {
+			return toPlayerString(orientation, speed, health, owner == playerIdx ? 1 : 0);
+		}
+
+		public void setMessage(String message) {
+			if (message != null && message.length() > 50) {
+				message = message.substring(0, 50) + "...";
+			}
+			this.message = message;
+		}
+
+		public void moveTo(int x, int y) {
+			Coord currentPosition = this.position;
+			Coord targetPosition = new Coord(x, y);
+
+			if (currentPosition.equals(targetPosition)) {
+				this.action = Action.SLOWER;
+				return;
+			}
+
+			double targetAngle, angleStraight, anglePort, angleStarboard, centerAngle, anglePortCenter, angleStarboardCenter;
+
+			switch (speed) {
+				case 2:
+					this.action = Action.SLOWER;
+					break;
+				case 1:
+					// Suppose we've moved first
+					currentPosition = currentPosition.neighbor(orientation);
+					if (!currentPosition.isInsideMap()) {
+						this.action = Action.SLOWER;
+						break;
+					}
+
+					// Target reached at next turn
+					if (currentPosition.equals(targetPosition)) {
+						this.action = null;
+						break;
+					}
+
+					// For each neighbor cell, find the closest to target
+					targetAngle = currentPosition.angle(targetPosition);
+					angleStraight = Math.min(Math.abs(orientation - targetAngle), 6 - Math.abs(orientation - targetAngle));
+					anglePort = Math.min(Math.abs((orientation + 1) - targetAngle), Math.abs((orientation - 5) - targetAngle));
+					angleStarboard = Math.min(Math.abs((orientation + 5) - targetAngle), Math.abs((orientation - 1) - targetAngle));
+
+					centerAngle = currentPosition.angle(new Coord(MAP_WIDTH / 2, MAP_HEIGHT / 2));
+					anglePortCenter = Math.min(Math.abs((orientation + 1) - centerAngle), Math.abs((orientation - 5) - centerAngle));
+					angleStarboardCenter = Math.min(Math.abs((orientation + 5) - centerAngle), Math.abs((orientation - 1) - centerAngle));
+
+					// Next to target with bad angle, slow down then rotate (avoid to turn around the target!)
+					if (currentPosition.distanceTo(targetPosition) == 1 && angleStraight > 1.5) {
+						this.action = Action.SLOWER;
+						break;
+					}
+
+					Integer distanceMin = null;
+
+					// Test forward
+					Coord nextPosition = currentPosition.neighbor(orientation);
+					if (nextPosition.isInsideMap()) {
+						distanceMin = nextPosition.distanceTo(targetPosition);
+						this.action = null;
+					}
+
+					// Test port
+					nextPosition = currentPosition.neighbor((orientation + 1) % 6);
+					if (nextPosition.isInsideMap()) {
+						int distance = nextPosition.distanceTo(targetPosition);
+						if (distanceMin == null || distance < distanceMin || distance == distanceMin && anglePort < angleStraight - 0.5) {
+							distanceMin = distance;
+							this.action = Action.PORT;
+						}
+					}
+
+					// Test starboard
+					nextPosition = currentPosition.neighbor((orientation + 5) % 6);
+					if (nextPosition.isInsideMap()) {
+						int distance = nextPosition.distanceTo(targetPosition);
+						if (distanceMin == null || distance < distanceMin
+								|| (distance == distanceMin && angleStarboard < anglePort - 0.5 && this.action == Action.PORT)
+								|| (distance == distanceMin && angleStarboard < angleStraight - 0.5 && this.action == null)
+								|| (distance == distanceMin && this.action == Action.PORT && angleStarboard == anglePort
+								&& angleStarboardCenter < anglePortCenter)
+								|| (distance == distanceMin && this.action == Action.PORT && angleStarboard == anglePort
+								&& angleStarboardCenter == anglePortCenter && (orientation == 1 || orientation == 4))) {
+							distanceMin = distance;
+							this.action = Action.STARBOARD;
+						}
+					}
+					break;
+				case 0:
+					// Rotate ship towards target
+					targetAngle = currentPosition.angle(targetPosition);
+					angleStraight = Math.min(Math.abs(orientation - targetAngle), 6 - Math.abs(orientation - targetAngle));
+					anglePort = Math.min(Math.abs((orientation + 1) - targetAngle), Math.abs((orientation - 5) - targetAngle));
+					angleStarboard = Math.min(Math.abs((orientation + 5) - targetAngle), Math.abs((orientation - 1) - targetAngle));
+
+					centerAngle = currentPosition.angle(new Coord(MAP_WIDTH / 2, MAP_HEIGHT / 2));
+					anglePortCenter = Math.min(Math.abs((orientation + 1) - centerAngle), Math.abs((orientation - 5) - centerAngle));
+					angleStarboardCenter = Math.min(Math.abs((orientation + 5) - centerAngle), Math.abs((orientation - 1) - centerAngle));
+
+					Coord forwardPosition = currentPosition.neighbor(orientation);
+
+					this.action = null;
+
+					if (anglePort <= angleStarboard) {
+						this.action = Action.PORT;
+					}
+
+					if (angleStarboard < anglePort || angleStarboard == anglePort && angleStarboardCenter < anglePortCenter
+							|| angleStarboard == anglePort && angleStarboardCenter == anglePortCenter && (orientation == 1 || orientation == 4)) {
+						this.action = Action.STARBOARD;
+					}
+
+					if (forwardPosition.isInsideMap() && angleStraight <= anglePort && angleStraight <= angleStarboard) {
+						this.action = Action.FASTER;
+					}
+					break;
+			}
+
+		}
+
+		public void faster() {
+			this.action = Action.FASTER;
+		}
+
+		public void slower() {
+			this.action = Action.SLOWER;
+		}
+
+		public void port() {
+			this.action = Action.PORT;
+		}
+
+		public void starboard() {
+			this.action = Action.STARBOARD;
+		}
+
+		public void placeMine() {
+			if (MINES_ENABLED) {
+				this.action = Action.MINE;
+			}
+		}
+
+		public Coord stern() {
+			return position.neighbor((orientation + 3) % 6);
+		}
+
+		public Coord bow() {
+			return position.neighbor(orientation);
+		}
+
+		public Coord newStern() {
+			return position.neighbor((newOrientation + 3) % 6);
+		}
+
+		public Coord newBow() {
+			return position.neighbor(newOrientation);
+		}
+
+		public boolean at(Coord coord) {
+			Coord stern = stern();
+			Coord bow = bow();
+			return stern != null && stern.equals(coord) || bow != null && bow.equals(coord) || position.equals(coord);
+		}
+
+		public boolean newBowIntersect(Ship other) {
+			return newBowCoordinate != null && (newBowCoordinate.equals(other.newBowCoordinate) || newBowCoordinate.equals(other.newPosition)
+					|| newBowCoordinate.equals(other.newSternCoordinate));
+		}
+
+		public boolean newBowIntersect(List<Ship> ships) {
+			for (Ship other : ships) {
+				if (this != other && newBowIntersect(other)) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		public boolean newPositionsIntersect(Ship other) {
+			boolean sternCollision = newSternCoordinate != null && (newSternCoordinate.equals(other.newBowCoordinate)
+					|| newSternCoordinate.equals(other.newPosition) || newSternCoordinate.equals(other.newSternCoordinate));
+			boolean centerCollision = newPosition != null && (newPosition.equals(other.newBowCoordinate) || newPosition.equals(other.newPosition)
+					|| newPosition.equals(other.newSternCoordinate));
+			return newBowIntersect(other) || sternCollision || centerCollision;
+		}
+
+		public boolean newPositionsIntersect(List<Ship> ships) {
+			for (Ship other : ships) {
+				if (this != other && newPositionsIntersect(other)) {
+					return true;
+				}
+			}
+			return false;
+		}
+
+		public void damage(int health) {
+			this.health -= health;
+			if (this.health <= 0) {
+				this.health = 0;
+			}
+		}
+
+		public void heal(int health) {
+			this.health += health;
+			if (this.health > MAX_SHIP_HEALTH) {
+				this.health = MAX_SHIP_HEALTH;
+			}
+		}
+
+		public void fire(int x, int y) {
+			if (CANNONS_ENABLED) {
+				Coord target = new Coord(x, y);
+				this.target = target;
+				this.action = Action.FIRE;
+			}
+		}
+	}
+
+	private static class Player {
+		private int id;
+		private List<Ship> ships;
+		private List<Ship> shipsAlive;
+
+		public Player(int id) {
+			this.id = id;
+			this.ships = new ArrayList<>();
+			this.shipsAlive = new ArrayList<>();
+		}
+
+		public void setDead() {
+			for (Ship ship : ships) {
+				ship.health = 0;
+			}
+		}
+
+		public int getScore() {
+			int score = 0;
+			for (Ship ship : ships) {
+				score += ship.health;
+			}
+			return score;
+		}
+
+		public List<String> toViewString() {
+			List<String> data = new ArrayList<>();
+
+			data.add(String.valueOf(this.id));
+			for (Ship ship : ships) {
+				data.add(ship.toViewString());
+			}
+
+			return data;
+		}
+	}
+
+	private long seed;
+	private List<Cannonball> cannonballs;
+	private List<Mine> mines;
+	private List<RumBarrel> barrels;
+	private List<Player> players;
+	private List<Ship> ships;
+	private List<Damage> damage;
+	private List<Coord> cannonBallExplosions;
+	private int shipsPerPlayer;
+	private int mineCount;
+	private int barrelCount;
+	private Random random;
+
+	public Referee(InputStream is, PrintStream out, PrintStream err) throws IOException {
+		initReferee(2, new Properties());
+
+		Scanner in = new Scanner(is);
+
+		try {
+			// Read ###Start 2
+			in.nextLine();
+
+			out.println("###Input 0");
+			for (String line : getInitInputForPlayer(0)) {
+				out.println(line);
+			}
+
+			out.println("###Input 1");
+			for (String line : getInitInputForPlayer(1)) {
+				out.println(line);
+			}
+
+			int round = 0;
+
+			while (round < getMaxRoundCount(2)) {
+				out.println("###Input 0");
+				for (String line : getInputForPlayer(round, 0)) {
+					out.println(line);
+				}
+
+				out.println("###Output 0 1");
+				try {
+					handlePlayerOutput(0, round, 0, new String[]{in.nextLine()});
+				} catch (LostException e) {
+					err.println("###Error 0 Lost " + e.getMessage());
+					players.get(0).setDead();
+				} catch (InvalidInputException e) {
+					err.println("###Error 0 InvalidInput " + e.getMessage());
+					players.get(0).setDead();
+				}
+
+				out.println("###Input 1");
+				for (String line : getInputForPlayer(round, 1)) {
+					out.println(line);
+				}
+
+				out.println("###Output 1 1");
+				try {
+					handlePlayerOutput(0, round, 1, new String[]{in.nextLine()});
+				} catch (LostException e) {
+					err.println("###Error 1 Lost " + e.getMessage());
+					players.get(1).setDead();
+				} catch (InvalidInputException e) {
+					err.println("###Error 1 InvalidInput " + e.getMessage());
+					players.get(1).setDead();
+				}
+
+				try {
+					updateGame(round);
+				} catch (GameOverException e) {
+					if (players.get(0).getScore() > players.get(1).getScore()) {
+						out.println("###End 0 1");
+					} else if (players.get(0).getScore() < players.get(1).getScore()) {
+						out.println("###End 1 0");
+					} else {
+						out.println("###End 01");
+					}
+
+					return;
+				}
+
+				round += 1;
+			}
+
+			if (players.get(0).getScore() > players.get(1).getScore()) {
+				out.println("###End 0 1");
+			} else if (players.get(0).getScore() < players.get(1).getScore()) {
+				out.println("###End 1 0");
+			} else {
+				out.println("###End 01");
+			}
+		} finally {
+			in.close();
+		}
+	}
+
+	public static void main(String... args) throws IOException {
+		new Referee(System.in, System.out, System.err);
+	}
+
+	protected void initReferee(int playerCount, Properties prop) {
+		seed = Long.valueOf(prop.getProperty("seed", String.valueOf(new Random(System.currentTimeMillis()).nextLong())));
+		random = new Random(this.seed);
+
+		shipsPerPlayer = clamp(
+				Integer.valueOf(prop.getProperty("shipsPerPlayer", String.valueOf(random.nextInt(1 + MAX_SHIPS - MIN_SHIPS) + MIN_SHIPS))), MIN_SHIPS,
+				MAX_SHIPS);
+
+		if (MAX_MINES > MIN_MINES) {
+			mineCount = clamp(Integer.valueOf(prop.getProperty("mineCount", String.valueOf(random.nextInt(MAX_MINES - MIN_MINES) + MIN_MINES))),
+					MIN_MINES, MAX_MINES);
 		} else {
-		    int unitCount = random.nextInt(5 * productionRate + 1);
-		    this.factories[i++] = new Factory(null, x, y, unitCount, productionRate);
-		    this.factories[i++] = new Factory(null, WIDTH - x, HEIGHT - y, unitCount, productionRate);
-		}
-	    }
-	}
-
-	int totalProductionRate = 0;
-	for (Factory factory : factories) {
-	    factory.computeDistances(this.factories);
-	    totalProductionRate += factory.productionRate;
-	}
-
-	// Make sure that the initial accumulated production rate for all the
-	// factories is at least MIN_TOTAL_PRODUCTION_RATE
-	for (int j = 1; totalProductionRate < MIN_TOTAL_PRODUCTION_RATE && j < factories.length; j++) {
-	    if (factories[j].productionRate < MAX_PRODUCTION_RATE) {
-		factories[j].productionRate++;
-		totalProductionRate++;
-	    }
-	}
-    }
-
-    protected Properties getConfiguration() {
-	Properties prop = new Properties();
-	prop.setProperty("seed", String.valueOf(this.seed));
-	if (this.customFactoryCount != null) {
-	    prop.setProperty("factory_count", String.valueOf(this.customFactoryCount));
-	}
-	if (this.customInitialUnitCount != null) {
-	    prop.setProperty("initial_unit_count", String.valueOf(this.customInitialUnitCount));
-	}
-	return prop;
-    }
-
-    protected String[] getInitInputForPlayer(int playerIdx) {
-	List<String> data = new ArrayList<>();
-	data.add(String.valueOf(factories.length));
-
-	// Factory distances
-	List<String> links = new ArrayList<>();
-	for (int i = 0; i < factories.length; i++) {
-	    for (int j = i + 1; j < factories.length; j++) {
-		links.add(factories[i].id + " " + factories[j].id + " " + factories[i].getDistanceTo(factories[j]));
-	    }
-	}
-	data.add(String.valueOf(links.size()));
-	data.addAll(links);
-
-	return data.toArray(new String[data.size()]);
-    }
-
-    protected void prepare(int round) {
-    }
-
-    protected String[] getInputForPlayer(int round, int playerIdx) {
-	List<String> data = new ArrayList<>();
-	List<String> entities = new ArrayList<>();
-
-	for (Factory factory : factories) {
-	    entities.add(factory.toPlayerString(playerIdx));
-	}
-	for (Troop troop : troops) {
-	    entities.add(troop.toPlayerString(playerIdx));
-	}
-	for (Bomb bomb : bombs) {
-	    entities.add(bomb.toPlayerString(playerIdx));
-	}
-
-	data.add(String.valueOf(entities.size()));
-	data.addAll(entities);
-	return data.toArray(new String[data.size()]);
-    }
-
-    protected int getExpectedOutputLineCountForPlayer(int playerIdx) {
-	return 1;
-    }
-
-    protected void handlePlayerOutput(int frame, int round, int playerIdx, String[] outputs)
-	    throws LostException, InvalidInputException {
-
-	Player player = this.players[playerIdx];
-	player.lastBombActions.clear();
-	player.lastIncActions.clear();
-	player.lastMoveActions.clear();
-	player.message = null;
-	try {
-	    for (String line : outputs) {
-		for (String action : PLAYER_INPUT_ACTION_SEPARATOR_PATTERN.split(line)) {
-		    Matcher matchMove = PLAYER_INPUT_MOVE_PATTERN.matcher(action);
-		    Matcher matchWait = PLAYER_INPUT_WAIT_PATTERN.matcher(action);
-		    Matcher matchBomb = PLAYER_INPUT_BOMB_PATTERN.matcher(action);
-		    Matcher matchInc = PLAYER_INPUT_INC_PATTERN.matcher(action);
-		    Matcher matchMessage = PLAYER_INPUT_MSG_PATTERN.matcher(action);
-		    if (matchMove.matches()) {
-			if (MOVE_RESTRICTION_ENABLED && !player.lastMoveActions.isEmpty()) {
-			    // Silently ignore multiple moves
-			    continue;
-			}
-
-			int src = Integer.parseInt(matchMove.group("src"));
-			int dst = Integer.parseInt(matchMove.group("dst"));
-			int units = Integer.parseInt(matchMove.group("units"));
-
-			if (src >= this.factories.length) {
-			    throw new InvalidInputException("0 <= source < " + this.factories.length,
-				    String.valueOf(src));
-			}
-			if (dst >= this.factories.length) {
-			    throw new InvalidInputException("0 <= destination < " + this.factories.length,
-				    String.valueOf(dst));
-			}
-			if (this.factories[src].owner != player) {
-			    throw new LostException("MoveFromNotControlledFactory", String.valueOf(src));
-			}
-			if (src == dst) {
-			    throw new LostException("MoveSameSourceDestination", String.valueOf(src));
-			}
-
-			player.lastMoveActions.add(new MoveAction(this.factories[src], this.factories[dst], units));
-		    } else if (matchBomb.matches()) {
-			int src = Integer.parseInt(matchBomb.group("src"));
-			int dst = Integer.parseInt(matchBomb.group("dst"));
-			if (src >= this.factories.length) {
-			    throw new InvalidInputException("0 <= source < " + this.factories.length,
-				    String.valueOf(src));
-			}
-			if (dst >= this.factories.length) {
-			    throw new InvalidInputException("0 <= destination < " + this.factories.length,
-				    String.valueOf(dst));
-			}
-			if (this.factories[src].owner != player) {
-			    throw new LostException("BombFromNotControlledFactory", String.valueOf(src));
-			}
-			if (src == dst) {
-			    throw new LostException("BombSameSourceDestination", String.valueOf(src));
-			}
-
-			player.lastBombActions.add(new BombAction(this.factories[src], this.factories[dst]));
-		    } else if (matchInc.matches()) {
-			if (!INCREASE_ACTION_ENABLED) {
-			    // Silently ignore increase actions
-			    continue;
-			}
-
-			int src = Integer.parseInt(matchInc.group("src"));
-
-			if (src >= this.factories.length) {
-			    throw new InvalidInputException("0 <= source < " + this.factories.length,
-				    String.valueOf(src));
-			}
-			if (this.factories[src].owner != player) {
-			    throw new LostException("IncFromNotControlledFactory", String.valueOf(src));
-			}
-
-			player.lastIncActions.add(new IncAction(this.factories[src]));
-		    } else if (matchWait.matches()) {
-			// do nothing.
-		    } else if (matchMessage.matches()) {
-			String message = matchMessage.group("message").trim();
-			if (message.length() > 100) {
-			    message = message.substring(0, 100);
-			}
-			player.message = message;
-		    } else {
-			throw new InvalidInputException("Invalid action", action);
-		    }
-		}
-	    }
-	} catch (InvalidInputException | LostException e) {
-	    player.setDead();
-	    throw e;
-	}
-    }
-
-    protected void updateGame(int round) throws GameOverException {
-	newTroops.clear();
-	newBombs.clear();
-
-	// ---
-	// Move troops and bombs
-	// ---
-	for (Troop troop : troops) {
-	    troop.move();
-	}
-	for (Bomb bomb : bombs) {
-	    bomb.move();
-	}
-
-	// ---
-	// Decrease disabled countdown
-	// ---
-	for (Factory factory : factories) {
-	    if (factory.disabled > 0) {
-		factory.disabled--;
-	    }
-	}
-
-	// ---
-	// Execute orders
-	// ---
-	for (Player player : players) {
-	    // Send bombs
-	    for (BombAction bombAction : player.lastBombActions) {
-		Bomb bomb = new Bomb(bombAction.src, bombAction.dst);
-		if (player.remainingBombs > 0 && bomb.findWithSameRouteInList(newBombs) == null) {
-		    newBombs.add(bomb);
-		    bombs.add(bomb);
-		    player.remainingBombs--;
-		}
-	    }
-
-	    // Send troops
-	    for (MoveAction moveAction : player.lastMoveActions) {
-		int unitsToMove = Math.min(moveAction.src.unitCount, moveAction.units);
-		Troop troop = new Troop(moveAction.src, moveAction.dst, unitsToMove);
-
-		if (unitsToMove > 0 && troop.findWithSameRouteInList(newBombs) == null) { // Forbid
-											  // sending
-											  // units
-											  // with
-											  // the
-											  // same
-											  // source
-											  // and
-											  // destination
-											  // as
-											  // a
-											  // bomb
-		    moveAction.src.unitCount -= unitsToMove;
-
-		    Troop other = troop.findWithSameRouteInList(newTroops);
-		    if (other != null) {
-			other.unitCount += unitsToMove;
-		    } else {
-			troops.add(troop);
-			newTroops.add(troop);
-		    }
-		}
-	    }
-
-	    // Increase
-	    for (IncAction incAction : player.lastIncActions) {
-		if (incAction.src.unitCount >= COST_INCREASE_PRODUCTION
-			&& incAction.src.productionRate < MAX_PRODUCTION_RATE) {
-		    incAction.src.productionRate++;
-		    incAction.src.unitCount -= COST_INCREASE_PRODUCTION;
-		}
-	    }
-	}
-
-	// ---
-	// Create new units
-	// ---
-	for (Factory factory : factories) {
-	    if (factory.owner != null) {
-		factory.unitCount += factory.getCurrentProductionRate();
-	    }
-	}
-
-	// ---
-	// Solve battles
-	// ---
-	for (Factory factory : factories) {
-	    factory.unitsReadyToFight[0] = factory.unitsReadyToFight[1] = 0;
-	}
-	for (Iterator<Troop> it = troops.iterator(); it.hasNext();) {
-	    Troop troop = it.next();
-	    if (troop.remainingTurns <= 0) {
-		troop.destination.unitsReadyToFight[troop.owner.id] += troop.unitCount;
-		it.remove();
-	    }
-	}
-	for (Factory factory : factories) {
-	    // Units from both players fight first
-	    int units = Math.min(factory.unitsReadyToFight[0], factory.unitsReadyToFight[1]);
-	    factory.unitsReadyToFight[0] -= units;
-	    factory.unitsReadyToFight[1] -= units;
-
-	    // Remaining units fight on the factory
-	    for (Player player : players) {
-		if (factory.owner == player) { // Allied
-		    factory.unitCount += factory.unitsReadyToFight[player.id];
-		} else { // Opponent
-		    if (factory.unitsReadyToFight[player.id] > factory.unitCount) {
-			factory.owner = player;
-			factory.unitCount = factory.unitsReadyToFight[player.id] - factory.unitCount;
-		    } else {
-			factory.unitCount -= factory.unitsReadyToFight[player.id];
-		    }
-		}
-	    }
-	}
-
-	// ---
-	// Solve bombs
-	// ---
-	for (Iterator<Bomb> it = bombs.iterator(); it.hasNext();) {
-	    Bomb bomb = it.next();
-	    if (bomb.remainingTurns <= 0) {
-		bomb.explode();
-		it.remove();
-	    }
-	}
-
-	// ---
-	// Update score
-	// ---
-	for (Player player : players) {
-	    player.score = 0;
-	}
-	for (Factory factory : factories) {
-	    if (factory.owner != null) {
-		factory.owner.score += factory.unitCount;
-	    }
-	}
-	for (Troop troop : troops) {
-	    if (troop.owner != null) {
-		troop.owner.score += troop.unitCount;
-	    }
-	}
-
-	// ---
-	// Check end conditions
-	// ---
-	for (Player player : players) {
-	    if (player.score == 0) {
-		int production = 0;
-		for (Factory factory : factories) {
-		    if (factory.owner == player) {
-			production += factory.productionRate;
-		    }
-		}
-		if (production == 0) {
-		    throw new GameOverException("endReached");
-		}
-	    }
-	}
-    }
-
-    protected void populateMessages(Properties p) {
-	p.put("endReached", "End reached");
-    }
-
-    protected String[] getInitDataForView() {
-	List<String> data = new ArrayList<>();
-	data.add(WIDTH + " " + HEIGHT + " " + factories.length + " " + BOMBS_PER_PLAYER);
-	for (Factory factory : factories) {
-	    data.add(factory.toViewStringInit());
-	}
-	data.add(0, String.valueOf(data.size() + 1));
-	return data.toArray(new String[data.size()]);
-    }
-
-    protected String[] getFrameDataForView(int round, int frame, boolean keyFrame) {
-	List<String> data = new ArrayList<>();
-	// Pass the scores and messages
-	for (int playerIdx = 0; playerIdx < players.length; ++playerIdx) {
-	    String playerInfo = String.valueOf(getScore(playerIdx)) + " " + players[playerIdx].remainingBombs;
-	    if (players[playerIdx].message != null) {
-		playerInfo += " " + players[playerIdx].message;
-	    }
-	    data.add(playerInfo);
-	}
-
-	// Pass the troops
-	List<String> troopData = new ArrayList<>();
-	for (Troop troop : newTroops) {
-	    troopData.add(troop.toViewString());
-	}
-	data.add(String.valueOf(troopData.size()));
-	data.addAll(troopData);
-
-	// Pass the bombs
-	List<String> bombData = new ArrayList<>();
-	for (Bomb bomb : newBombs) {
-	    bombData.add(bomb.toViewString());
-	}
-	data.add(String.valueOf(bombData.size()));
-	data.addAll(bombData);
-
-	// Pass the factories
-	for (Factory factory : factories) {
-	    data.add(factory.toViewString());
-	}
-	return data.toArray(new String[data.size()]);
-    }
-
-    protected String getGameName() {
-	return "GhostInTheCell";
-    }
-
-    protected String getHeadlineAtGameStartForConsole() {
-	return null;
-    }
-
-    protected int getMinimumPlayerCount() {
-	return 2;
-    }
-
-    protected boolean showTooltips() {
-	return true;
-    }
-
-    protected String[] getPlayerActions(int playerIdx, int round) {
-	return new String[0];
-    }
-
-    protected boolean isPlayerDead(int playerIdx) {
-	return false;
-    }
-
-    protected String getDeathReason(int playerIdx) {
-	return "$" + playerIdx + ": Eliminated!";
-    }
-
-    protected int getScore(int playerIdx) {
-	return players[playerIdx].score;
-    }
-
-    protected String[] getGameSummary(int round) {
-	return new String[0];
-    }
-
-    protected void setPlayerTimeout(int frame, int round, int playerIdx) {
-	players[playerIdx].setDead();
-    }
-
-    protected int getMaxRoundCount(int playerCount) {
-	return 200;
-    }
-
-    protected int getMillisTimeForRound() {
-	return 50;
-    }
-
-    public Referee(InputStream is, PrintStream out, PrintStream err) throws IOException {
-	initReferee(2, new Properties());
-
-	Scanner in = new Scanner(is);
-	
-	try {
-	    // Read ###Start 2
-	    in.nextLine();
-	    
-	    out.println("###Input 0");
-	    for (String line : getInitInputForPlayer(0)) {
-		out.println(line);
-	    }
-
-	    out.println("###Input 1");
-	    for (String line : getInitInputForPlayer(1)) {
-		out.println(line);
-	    }
-
-	    int round = 0;
-
-	    while (round < getMaxRoundCount(2)) {
-		out.println("###Input 0");
-		for (String line : getInputForPlayer(round, 0)) {
-		    out.println(line);
+			mineCount = MIN_MINES;
 		}
 
-		out.println("###Output 0 1");
+		barrelCount = clamp(
+				Integer.valueOf(prop.getProperty("barrelCount", String.valueOf(random.nextInt(MAX_RUM_BARRELS - MIN_RUM_BARRELS) + MIN_RUM_BARRELS))),
+				MIN_RUM_BARRELS, MAX_RUM_BARRELS);
+
+		cannonballs = new ArrayList<>();
+		cannonBallExplosions = new ArrayList<>();
+		damage = new ArrayList<>();
+
+		// Generate Players
+		this.players = new ArrayList<Player>(playerCount);
+		for (int i = 0; i < playerCount; i++) {
+			this.players.add(new Player(i));
+		}
+		// Generate Ships
+		for (int j = 0; j < shipsPerPlayer; j++) {
+			int xMin = 1 + j * MAP_WIDTH / shipsPerPlayer;
+			int xMax = (j + 1) * MAP_WIDTH / shipsPerPlayer - 2;
+
+			int y = 1 + random.nextInt(MAP_HEIGHT / 2 - 2);
+			int x = xMin + random.nextInt(1 + xMax - xMin);
+			int orientation = random.nextInt(6);
+
+			Ship ship0 = new Ship(x, y, orientation, 0);
+			Ship ship1 = new Ship(x, MAP_HEIGHT - 1 - y, (6 - orientation) % 6, 1);
+
+			this.players.get(0).ships.add(ship0);
+			this.players.get(1).ships.add(ship1);
+			this.players.get(0).shipsAlive.add(ship0);
+			this.players.get(1).shipsAlive.add(ship1);
+		}
+
+		this.ships = players.stream().map(p -> p.ships).flatMap(List::stream).collect(Collectors.toList());
+
+		// Generate mines
+		mines = new ArrayList<>();
+		while (mines.size() < mineCount) {
+			int x = 1 + random.nextInt(MAP_WIDTH - 2);
+			int y = 1 + random.nextInt(MAP_HEIGHT / 2);
+
+			Mine m = new Mine(x, y);
+
+			boolean cellIsFreeOfMines = mines.stream().noneMatch(mine -> mine.position.equals(m.position));
+			boolean cellIsFreeOfShips = ships.stream().noneMatch(ship -> ship.at(m.position));
+
+			if (cellIsFreeOfShips && cellIsFreeOfMines) {
+				if (y != MAP_HEIGHT - 1 - y) {
+					mines.add(new Mine(x, MAP_HEIGHT - 1 - y));
+				}
+				mines.add(m);
+			}
+		}
+		mineCount = mines.size();
+
+		// Generate supplies
+		barrels = new ArrayList<>();
+		while (barrels.size() < barrelCount) {
+			int x = 1 + random.nextInt(MAP_WIDTH - 2);
+			int y = 1 + random.nextInt(MAP_HEIGHT / 2);
+			int h = MIN_RUM_BARREL_VALUE + random.nextInt(1 + MAX_RUM_BARREL_VALUE - MIN_RUM_BARREL_VALUE);
+
+			RumBarrel m = new RumBarrel(x, y, h);
+
+			boolean cellIsFreeOfBarrels = barrels.stream().noneMatch(barrel -> barrel.position.equals(m.position));
+			boolean cellIsFreeOfMines = mines.stream().noneMatch(mine -> mine.position.equals(m.position));
+			boolean cellIsFreeOfShips = ships.stream().noneMatch(ship -> ship.at(m.position));
+
+			if (cellIsFreeOfShips && cellIsFreeOfMines && cellIsFreeOfBarrels) {
+				if (y != MAP_HEIGHT - 1 - y) {
+					barrels.add(new RumBarrel(x, MAP_HEIGHT - 1 - y, h));
+				}
+				barrels.add(m);
+			}
+		}
+		barrelCount = barrels.size();
+
+	}
+
+	protected Properties getConfiguration() {
+		Properties prop = new Properties();
+		prop.setProperty("seed", String.valueOf(seed));
+		prop.setProperty("shipsPerPlayer", String.valueOf(shipsPerPlayer));
+		prop.setProperty("barrelCount", String.valueOf(barrelCount));
+		prop.setProperty("mineCount", String.valueOf(mineCount));
+		return prop;
+	}
+
+	protected void prepare(int round) {
+		for (Player player : players) {
+			for (Ship ship : player.ships) {
+				ship.action = null;
+				ship.message = null;
+			}
+		}
+		cannonBallExplosions.clear();
+		damage.clear();
+	}
+
+	protected int getExpectedOutputLineCountForPlayer(int playerIdx) {
+		return this.players.get(playerIdx).shipsAlive.size();
+	}
+
+	protected void handlePlayerOutput(int frame, int round, int playerIdx, String[] outputs)
+			throws LostException, InvalidInputException {
+		Player player = this.players.get(playerIdx);
+
 		try {
-		    handlePlayerOutput(0, round, 0, new String[] { in.nextLine() });
-		} catch (LostException e) {
-		    err.println("###Error 0 Lost " + e.getMessage());
-		    players[0].setDead();
+			int i = 0;
+			for (String line : outputs) {
+				Matcher matchWait = PLAYER_INPUT_WAIT_PATTERN.matcher(line);
+				Matcher matchMove = PLAYER_INPUT_MOVE_PATTERN.matcher(line);
+				Matcher matchFaster = PLAYER_INPUT_FASTER_PATTERN.matcher(line);
+				Matcher matchSlower = PLAYER_INPUT_SLOWER_PATTERN.matcher(line);
+				Matcher matchPort = PLAYER_INPUT_PORT_PATTERN.matcher(line);
+				Matcher matchStarboard = PLAYER_INPUT_STARBOARD_PATTERN.matcher(line);
+				Matcher matchFire = PLAYER_INPUT_FIRE_PATTERN.matcher(line);
+				Matcher matchMine = PLAYER_INPUT_MINE_PATTERN.matcher(line);
+				Ship ship = player.shipsAlive.get(i++);
+
+				if (matchMove.matches()) {
+					int x = Integer.parseInt(matchMove.group("x"));
+					int y = Integer.parseInt(matchMove.group("y"));
+					ship.setMessage(matchMove.group("message"));
+					ship.moveTo(x, y);
+				} else if (matchFaster.matches()) {
+					ship.setMessage(matchFaster.group("message"));
+					ship.faster();
+				} else if (matchSlower.matches()) {
+					ship.setMessage(matchSlower.group("message"));
+					ship.slower();
+				} else if (matchPort.matches()) {
+					ship.setMessage(matchPort.group("message"));
+					ship.port();
+				} else if (matchStarboard.matches()) {
+					ship.setMessage(matchStarboard.group("message"));
+					ship.starboard();
+				} else if (matchWait.matches()) {
+					ship.setMessage(matchWait.group("message"));
+				} else if (matchMine.matches()) {
+					ship.setMessage(matchMine.group("message"));
+					ship.placeMine();
+				} else if (matchFire.matches()) {
+					int x = Integer.parseInt(matchFire.group("x"));
+					int y = Integer.parseInt(matchFire.group("y"));
+					ship.setMessage(matchFire.group("message"));
+					ship.fire(x, y);
+				} else {
+					throw new InvalidInputException("A valid action", line);
+				}
+			}
 		} catch (InvalidInputException e) {
-		    err.println("###Error 0 InvalidInput " + e.getMessage());
-		    players[0].setDead();
+			player.setDead();
+			throw e;
 		}
-
-		out.println("###Input 1");
-		for (String line : getInputForPlayer(round, 1)) {
-		    out.println(line);
-		}
-
-		out.println("###Output 1 1");
-		try {
-		    handlePlayerOutput(0, round, 1, new String[] { in.nextLine() });
-		} catch (LostException e) {
-		    err.println("###Error 1 Lost " + e.getMessage());
-		    players[1].setDead();
-		} catch (InvalidInputException e) {
-		    err.println("###Error 1 InvalidInput " + e.getMessage());
-		    players[1].setDead();
-		}
-
-		try {
-		    updateGame(round);
-		} catch (GameOverException e) {
-		    if (players[0].score > players[1].score) {
-			out.println("###End 0 1");
-		    } else if (players[0].score < players[1].score) {
-			out.println("###End 1 0");
-		    } else {
-			out.println("###End 01");
-		    }
-
-		    return;
-		}
-
-		round += 1;
-	    }
-
-	    if (players[0].score > players[1].score) {
-		out.println("###End 0 1");
-	    } else if (players[0].score < players[1].score) {
-		out.println("###End 1 0");
-	    } else {
-		out.println("###End 01");
-	    }
-	} finally {
-	    in.close();
 	}
-    }
 
-    public static void main(String... args) throws IOException {
-	new Referee(System.in, System.out, System.err);
-    }
+	private void decrementRum() {
+		for (Ship ship : ships) {
+			ship.damage(1);
+		}
+	}
+
+	private void updateInitialRum() {
+		for (Ship ship : ships) {
+			ship.initialHealth = ship.health;
+		}
+	}
+
+	private void moveCannonballs() {
+		for (Iterator<Cannonball> it = cannonballs.iterator(); it.hasNext();) {
+			Cannonball ball = it.next();
+			if (ball.remainingTurns == 0) {
+				it.remove();
+				continue;
+			} else if (ball.remainingTurns > 0) {
+				ball.remainingTurns--;
+			}
+
+			if (ball.remainingTurns == 0) {
+				cannonBallExplosions.add(ball.position);
+			}
+		}
+	}
+
+	private void applyActions() {
+		for (Player player : players) {
+			for (Ship ship : player.shipsAlive) {
+				if (ship.mineCooldown > 0) {
+					ship.mineCooldown--;
+				}
+				if (ship.cannonCooldown > 0) {
+					ship.cannonCooldown--;
+				}
+
+				ship.newOrientation = ship.orientation;
+
+				if (ship.action != null) {
+					switch (ship.action) {
+						case FASTER:
+							if (ship.speed < MAX_SHIP_SPEED) {
+								ship.speed++;
+							}
+							break;
+						case SLOWER:
+							if (ship.speed > 0) {
+								ship.speed--;
+							}
+							break;
+						case PORT:
+							ship.newOrientation = (ship.orientation + 1) % 6;
+							break;
+						case STARBOARD:
+							ship.newOrientation = (ship.orientation + 5) % 6;
+							break;
+						case MINE:
+							if (ship.mineCooldown == 0) {
+								Coord target = ship.stern().neighbor((ship.orientation + 3) % 6);
+
+								if (target.isInsideMap()) {
+									boolean cellIsFreeOfBarrels = barrels.stream().noneMatch(barrel -> barrel.position.equals(target));
+									boolean cellIsFreeOfMines = mines.stream().noneMatch(mine -> mine.position.equals(target));
+									boolean cellIsFreeOfShips = ships.stream().filter(b -> b != ship).noneMatch(b -> b.at(target));
+
+									if (cellIsFreeOfBarrels && cellIsFreeOfShips && cellIsFreeOfMines) {
+										ship.mineCooldown = COOLDOWN_MINE;
+										Mine mine = new Mine(target.x, target.y);
+										mines.add(mine);
+									}
+								}
+
+							}
+							break;
+						case FIRE:
+							int distance = ship.bow().distanceTo(ship.target);
+							if (ship.target.isInsideMap() && distance <= FIRE_DISTANCE_MAX && ship.cannonCooldown == 0) {
+								int travelTime = (int) (1 + Math.round(ship.bow().distanceTo(ship.target) / 3.0));
+								cannonballs.add(new Cannonball(ship.target.x, ship.target.y, ship.id, ship.bow().x, ship.bow().y, travelTime));
+								ship.cannonCooldown = COOLDOWN_CANNON;
+							}
+							break;
+						default:
+							break;
+					}
+				}
+			}
+		}
+	}
+
+	private void checkCollisions(Ship ship) {
+		Coord bow = ship.bow();
+		Coord stern = ship.stern();
+		Coord center = ship.position;
+
+		// Collision with the barrels
+		for (Iterator<RumBarrel> it = barrels.iterator(); it.hasNext();) {
+			RumBarrel barrel = it.next();
+			if (barrel.position.equals(bow) || barrel.position.equals(stern) || barrel.position.equals(center)) {
+				ship.heal(barrel.health);
+				it.remove();
+			}
+		}
+
+		// Collision with the mines
+		for (Iterator<Mine> it = mines.iterator(); it.hasNext();) {
+			Mine mine = it.next();
+			List<Damage> mineDamage = mine.explode(ships, false);
+
+			if (!mineDamage.isEmpty()) {
+				damage.addAll(mineDamage);
+				it.remove();
+			}
+		}
+	}
+
+	private void moveShips() {
+		// ---
+		// Go forward
+		// ---
+		for (int i = 1; i <= MAX_SHIP_SPEED; i++) {
+			for (Player player : players) {
+				for (Ship ship : player.shipsAlive) {
+					ship.newPosition = ship.position;
+					ship.newBowCoordinate = ship.bow();
+					ship.newSternCoordinate = ship.stern();
+
+					if (i > ship.speed) {
+						continue;
+					}
+
+					Coord newCoordinate = ship.position.neighbor(ship.orientation);
+
+					if (newCoordinate.isInsideMap()) {
+						// Set new coordinate.
+						ship.newPosition = newCoordinate;
+						ship.newBowCoordinate = newCoordinate.neighbor(ship.orientation);
+						ship.newSternCoordinate = newCoordinate.neighbor((ship.orientation + 3) % 6);
+					} else {
+						// Stop ship!
+						ship.speed = 0;
+					}
+				}
+			}
+
+			// Check ship and obstacles collisions
+			List<Ship> collisions = new ArrayList<>();
+			boolean collisionDetected = true;
+			while (collisionDetected) {
+				collisionDetected = false;
+
+				for (Ship ship : this.ships) {
+					if (ship.newBowIntersect(ships)) {
+						collisions.add(ship);
+					}
+				}
+
+				for (Ship ship : collisions) {
+					// Revert last move
+					ship.newPosition = ship.position;
+					ship.newBowCoordinate = ship.bow();
+					ship.newSternCoordinate = ship.stern();
+
+					// Stop ships
+					ship.speed = 0;
+
+					collisionDetected = true;
+				}
+				collisions.clear();
+			}
+
+			// Move ships to their new location
+			for (Ship ship : this.ships) {
+				ship.position = ship.newPosition;
+			}
+
+			// Check collisions
+			for (Ship ship : this.ships) {
+				checkCollisions(ship);
+			}
+		}
+	}
+
+	private void rotateShips() {
+		// Rotate
+		for (Player player : players) {
+			for (Ship ship : player.shipsAlive) {
+				ship.newPosition = ship.position;
+				ship.newBowCoordinate = ship.newBow();
+				ship.newSternCoordinate = ship.newStern();
+			}
+		}
+
+		// Check collisions
+		boolean collisionDetected = true;
+		List<Ship> collisions = new ArrayList<>();
+		while (collisionDetected) {
+			collisionDetected = false;
+
+			for (Ship ship : this.ships) {
+				if (ship.newPositionsIntersect(ships)) {
+					collisions.add(ship);
+				}
+			}
+
+			for (Ship ship : collisions) {
+				ship.newOrientation = ship.orientation;
+				ship.newBowCoordinate = ship.newBow();
+				ship.newSternCoordinate = ship.newStern();
+				ship.speed = 0;
+				collisionDetected = true;
+			}
+
+			collisions.clear();
+		}
+
+		// Apply rotation
+		for (Ship ship : this.ships) {
+			ship.orientation = ship.newOrientation;
+		}
+
+		// Check collisions
+		for (Ship ship : this.ships) {
+			checkCollisions(ship);
+		}
+	}
+
+	private boolean gameIsOver() {
+		for (Player player : players) {
+			if (player.shipsAlive.isEmpty()) {
+				return true;
+			}
+		}
+		return barrels.size() == 0 && LEAGUE_LEVEL == 0;
+	}
+
+	void explodeShips() {
+		for (Iterator<Coord> it = cannonBallExplosions.iterator(); it.hasNext();) {
+			Coord position = it.next();
+			for (Ship ship : ships) {
+				if (position.equals(ship.bow()) || position.equals(ship.stern())) {
+					damage.add(new Damage(position, LOW_DAMAGE, true));
+					ship.damage(LOW_DAMAGE);
+					it.remove();
+					break;
+				} else if (position.equals(ship.position)) {
+					damage.add(new Damage(position, HIGH_DAMAGE, true));
+					ship.damage(HIGH_DAMAGE);
+					it.remove();
+					break;
+				}
+			}
+		}
+	}
+
+	void explodeMines() {
+		for (Iterator<Coord> itBall = cannonBallExplosions.iterator(); itBall.hasNext();) {
+			Coord position = itBall.next();
+			for (Iterator<Mine> it = mines.iterator(); it.hasNext();) {
+				Mine mine = it.next();
+				if (mine.position.equals(position)) {
+					damage.addAll(mine.explode(ships, true));
+					it.remove();
+					itBall.remove();
+					break;
+				}
+			}
+		}
+	}
+
+	void explodeBarrels() {
+		for (Iterator<Coord> itBall = cannonBallExplosions.iterator(); itBall.hasNext();) {
+			Coord position = itBall.next();
+			for (Iterator<RumBarrel> it = barrels.iterator(); it.hasNext();) {
+				RumBarrel barrel = it.next();
+				if (barrel.position.equals(position)) {
+					damage.add(new Damage(position, 0, true));
+					it.remove();
+					itBall.remove();
+					break;
+				}
+			}
+		}
+	}
+
+	protected void updateGame(int round) throws GameOverException {
+		moveCannonballs();
+		decrementRum();
+		updateInitialRum();
+
+		applyActions();
+		moveShips();
+		rotateShips();
+
+		explodeShips();
+		explodeMines();
+		explodeBarrels();
+
+		// For each sunk ship, create a new rum barrel with the amount of rum the ship had at the begin of the turn (up to 30).
+		for (Ship ship : ships) {
+			if (ship.health <= 0) {
+				int reward = Math.min(REWARD_RUM_BARREL_VALUE, ship.initialHealth);
+				if (reward > 0) {
+					barrels.add(new RumBarrel(ship.position.x, ship.position.y, reward));
+				}
+			}
+		}
+
+		for (Coord position : cannonBallExplosions) {
+			damage.add(new Damage(position, 0, false));
+		}
+
+		for (Iterator<Ship> it = ships.iterator(); it.hasNext();) {
+			Ship ship = it.next();
+			if (ship.health <= 0) {
+				players.get(ship.owner).shipsAlive.remove(ship);
+				it.remove();
+			}
+		}
+
+		if (gameIsOver()) {
+			throw new GameOverException("endReached");
+		}
+	}
+
+	protected void populateMessages(Properties p) {
+		p.put("endReached", "End reached");
+	}
+
+	protected String[] getInitInputForPlayer(int playerIdx) {
+		return new String[0];
+	}
+
+	protected String[] getInputForPlayer(int round, int playerIdx) {
+		List<String> data = new ArrayList<>();
+
+		// Player's ships first
+		for (Ship ship : players.get(playerIdx).shipsAlive) {
+			data.add(ship.toPlayerString(playerIdx));
+		}
+
+		// Number of ships
+		data.add(0, String.valueOf(data.size()));
+
+		// Opponent's ships
+		for (Ship ship : players.get((playerIdx + 1) % 2).shipsAlive) {
+			data.add(ship.toPlayerString(playerIdx));
+		}
+
+		// Visible mines
+		for (Mine mine : mines) {
+			boolean visible = false;
+			for (Ship ship : players.get(playerIdx).shipsAlive) {
+				if (ship.position.distanceTo(mine.position) <= MINE_VISIBILITY_RANGE) {
+					visible = true;
+					break;
+				}
+			}
+			if (visible) {
+				data.add(mine.toPlayerString(playerIdx));
+			}
+		}
+
+		for (Cannonball ball : cannonballs) {
+			data.add(ball.toPlayerString(playerIdx));
+		}
+
+		for (RumBarrel barrel : barrels) {
+			data.add(barrel.toPlayerString(playerIdx));
+		}
+
+		data.add(1, String.valueOf(data.size() - 1));
+
+		return data.toArray(new String[data.size()]);
+	}
+
+	protected String[] getInitDataForView() {
+		List<String> data = new ArrayList<>();
+
+		data.add(join(MAP_WIDTH, MAP_HEIGHT, players.get(0).ships.size(), MINE_VISIBILITY_RANGE));
+
+		data.add(0, String.valueOf(data.size() + 1));
+
+		return data.toArray(new String[data.size()]);
+	}
+
+	protected String[] getFrameDataForView(int round, int frame, boolean keyFrame) {
+		List<String> data = new ArrayList<>();
+
+		for (Player player : players) {
+			data.addAll(player.toViewString());
+		}
+		data.add(String.valueOf(cannonballs.size()));
+		for (Cannonball ball : cannonballs) {
+			data.add(ball.toViewString());
+		}
+		data.add(String.valueOf(mines.size()));
+		for (Mine mine : mines) {
+			data.add(mine.toViewString());
+		}
+		data.add(String.valueOf(barrels.size()));
+		for (RumBarrel barrel : barrels) {
+			data.add(barrel.toViewString());
+		}
+		data.add(String.valueOf(damage.size()));
+		for (Damage d : damage) {
+			data.add(d.toViewString());
+		}
+
+		return data.toArray(new String[data.size()]);
+	}
+
+	protected String getGameName() {
+		return "CodersOfTheCaribbean";
+	}
+
+	protected String getHeadlineAtGameStartForConsole() {
+		return null;
+	}
+
+	protected int getMinimumPlayerCount() {
+		return 2;
+	}
+
+	protected boolean showTooltips() {
+		return true;
+	}
+
+	protected String[] getPlayerActions(int playerIdx, int round) {
+		return new String[0];
+	}
+
+	protected boolean isPlayerDead(int playerIdx) {
+		return false;
+	}
+
+	protected String getDeathReason(int playerIdx) {
+		return "$" + playerIdx + ": Eliminated!";
+	}
+
+	protected int getScore(int playerIdx) {
+		return players.get(playerIdx).getScore();
+	}
+
+	protected String[] getGameSummary(int round) {
+		return new String[0];
+	}
+
+	protected void setPlayerTimeout(int frame, int round, int playerIdx) {
+		players.get(playerIdx).setDead();
+	}
+
+	protected int getMaxRoundCount(int playerCount) {
+		return 200;
+	}
+
+	protected int getMillisTimeForRound() {
+		return 50;
+	}
 }
