@@ -675,9 +675,14 @@ class Referee {
 					out.println(line);
 				}
 
-				out.println("###Output 0 1");
+				int expectedOutputLineCount = getExpectedOutputLineCountForPlayer(0);
+				out.println("###Output 0 " + expectedOutputLineCount);
 				try {
-					handlePlayerOutput(0, round, 0, new String[]{in.nextLine()});
+					String[] outputs = new String[expectedOutputLineCount];
+					for (int i = 0; i < expectedOutputLineCount; i++) {
+						outputs[i] = in.nextLine();
+					}
+					handlePlayerOutput(0, round, 0, outputs);
 				} catch (LostException e) {
 					err.println("###Error 0 Lost " + e.getMessage());
 					players.get(0).setDead();
@@ -691,9 +696,14 @@ class Referee {
 					out.println(line);
 				}
 
-				out.println("###Output 1 1");
+				expectedOutputLineCount = getExpectedOutputLineCountForPlayer(1);
+				out.println("###Output 1 " + expectedOutputLineCount);
 				try {
-					handlePlayerOutput(0, round, 1, new String[]{in.nextLine()});
+					String[] outputs = new String[expectedOutputLineCount];
+					for (int i = 0; i < expectedOutputLineCount; i++) {
+						outputs[i] = in.nextLine();
+					}
+					handlePlayerOutput(0, round, 1, outputs);
 				} catch (LostException e) {
 					err.println("###Error 1 Lost " + e.getMessage());
 					players.get(1).setDead();
