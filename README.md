@@ -6,3 +6,7 @@ A compatible referee for [cg-brutaltester](https://github.com/dreignier/cg-bruta
 
     $ javac -d . src/*.java
     $ jar cfe cg-cotc.jar Referee *.class
+
+## Prebuilt
+
+see [releases](../../releases/)
