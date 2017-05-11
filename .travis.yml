@@ -13,4 +13,5 @@ deploy:
   file: cg-cotc.jar
   skip_cleanup: true
   on:
-    repo: KevinBusse/cg-referee-coders-of-the-caribbean
+#    repo: KevinBusse/cg-referee-coders-of-the-caribbean
+    tags: true
