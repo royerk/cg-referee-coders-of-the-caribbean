@@ -661,14 +661,22 @@ class Referee {
 
 		long timestamp = System.currentTimeMillis();
 
+		// todo generate some random string
+		
+		// todo key = timestamp + random string
+
 		try {
 			// Read ###Start 2
 			in.nextLine();
+
+			// todo send key 0 to player 0
 
 			out.println("###Input 0");
 			for (String line : getInitInputForPlayer(0)) {
 				out.println(line);
 			}
+
+			// todo send key 1 to player 1
 
 			out.println("###Input 1");
 			for (String line : getInitInputForPlayer(1)) {
@@ -737,6 +745,8 @@ class Referee {
 
 				round += 1;
 			}
+
+			// todo create file with name key_winner (0/1)
 
 			if (players.get(0).getScore() > players.get(1).getScore()) {
 				out.println("###End 0 1");
