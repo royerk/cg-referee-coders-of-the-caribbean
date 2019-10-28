@@ -659,6 +659,8 @@ class Referee {
 
 		Scanner in = new Scanner(is);
 
+		long timestamp = System.currentTimeMillis();
+
 		try {
 			// Read ###Start 2
 			in.nextLine();

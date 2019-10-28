@@ -10,3 +10,10 @@ A compatible referee for [cg-brutaltester](https://github.com/dreignier/cg-bruta
 ## Prebuilt
 
 see [releases](../../releases/)
+
+## Add logging
+
+* Use timestamp as unique identifier for the game.
+* Send timestamp to the bot.
+* Send player identification (0 or 1) to the bot.
+* Store timestamp and winner to disk.
