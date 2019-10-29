@@ -775,9 +775,9 @@ class Referee {
 		} finally {
 		    // send "save" instead of key to trigger logging
             out.println("###Input 0");
-            out.println("save")
+            out.println("save");
             out.println("###Input 1");
-            out.println("save")
+            out.println("save");
 			File f = new File("matchs/"+fileName);
 			f.createNewFile();
 			in.close();
