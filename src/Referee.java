@@ -664,8 +664,10 @@ class Referee {
 
 		// todo generate some random string
 		String key = timestamp + "";
-		// todo key = timestamp + random string
-
+		String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		for (int i = 0; i < 5; i++) {
+			key += (int)(alpha.length() * Math.random());
+		}
 		String fileName = key;
 
 		try {
