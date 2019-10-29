@@ -19,6 +19,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.io.File;
 
 class Referee {
 	private static final int LEAGUE_LEVEL = 3;
@@ -662,8 +663,10 @@ class Referee {
 		long timestamp = System.currentTimeMillis();
 
 		// todo generate some random string
-		
+		String key = timestamp + "";
 		// todo key = timestamp + random string
+
+		String fileName = key;
 
 		try {
 			// Read ###Start 2
@@ -733,10 +736,13 @@ class Referee {
 					updateGame(round);
 				} catch (GameOverException e) {
 					if (players.get(0).getScore() > players.get(1).getScore()) {
+						fileName += "_0";
 						out.println("###End 0 1");
 					} else if (players.get(0).getScore() < players.get(1).getScore()) {
+						fileName += "_1";
 						out.println("###End 1 0");
 					} else {
+						fileName += "_2";
 						out.println("###End 01");
 					}
 
@@ -747,15 +753,25 @@ class Referee {
 			}
 
 			// todo create file with name key_winner (0/1)
+			
+			// todo send bot order to write to file
 
 			if (players.get(0).getScore() > players.get(1).getScore()) {
+				fileName += "_0";
 				out.println("###End 0 1");
 			} else if (players.get(0).getScore() < players.get(1).getScore()) {
+				fileName += "_1";
+				err.println(fileName);
 				out.println("###End 1 0");
 			} else {
+				fileName += "_2";
+				err.println(fileName);
 				out.println("###End 01");
 			}
 		} finally {
+			err.println(fileName);
+			File f = new File("matchs/"+fileName);
+			f.createNewFile();
 			in.close();
 		}
 	}
