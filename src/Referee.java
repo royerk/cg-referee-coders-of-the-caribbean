@@ -666,7 +666,7 @@ class Referee {
 		String key = timestamp + "";
 		String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 		for (int i = 0; i < 5; i++) {
-			key += (int)(alpha.length() * Math.random());
+			key += alpha.charAt((int)(alpha.length() * Math.random()));
 		}
 		String fileName = key;
 
@@ -677,6 +677,8 @@ class Referee {
 			// todo send key 0 to player 0
 
 			out.println("###Input 0");
+			out.println(key);
+			out.println(0);
 			for (String line : getInitInputForPlayer(0)) {
 				out.println(line);
 			}
@@ -684,6 +686,8 @@ class Referee {
 			// todo send key 1 to player 1
 
 			out.println("###Input 1");
+            out.println(key);
+            out.println(1);
 			for (String line : getInitInputForPlayer(1)) {
 				out.println(line);
 			}
@@ -763,15 +767,17 @@ class Referee {
 				out.println("###End 0 1");
 			} else if (players.get(0).getScore() < players.get(1).getScore()) {
 				fileName += "_1";
-				err.println(fileName);
 				out.println("###End 1 0");
 			} else {
 				fileName += "_2";
-				err.println(fileName);
 				out.println("###End 01");
 			}
 		} finally {
-			err.println(fileName);
+		    // send "save" instead of key to trigger logging
+            out.println("###Input 0");
+            out.println("save")
+            out.println("###Input 1");
+            out.println("save")
 			File f = new File("matchs/"+fileName);
 			f.createNewFile();
 			in.close();
