@@ -674,16 +674,12 @@ class Referee {
 			// Read ###Start 2
 			in.nextLine();
 
-			// todo send key 0 to player 0
-
 			out.println("###Input 0");
 			out.println(key);
 			out.println(0);
 			for (String line : getInitInputForPlayer(0)) {
 				out.println(line);
 			}
-
-			// todo send key 1 to player 1
 
 			out.println("###Input 1");
             out.println(key);
@@ -743,12 +739,27 @@ class Referee {
 				} catch (GameOverException e) {
 					if (players.get(0).getScore() > players.get(1).getScore()) {
 						fileName += "_0";
+						// send 66 instead of key to trigger logging
+						out.println("###Input 0");
+						out.println(66);
+						out.println("###Input 1");
+						out.println(66);
 						out.println("###End 0 1");
 					} else if (players.get(0).getScore() < players.get(1).getScore()) {
 						fileName += "_1";
+						// send 66 instead of key to trigger logging
+						out.println("###Input 0");
+						out.println(66);
+						out.println("###Input 1");
+						out.println(66);
 						out.println("###End 1 0");
 					} else {
 						fileName += "_2";
+						// send 66 instead of key to trigger logging
+						out.println("###Input 0");
+						out.println(66);
+						out.println("###Input 1");
+						out.println(66);
 						out.println("###End 01");
 					}
 
@@ -764,21 +775,31 @@ class Referee {
 
 			if (players.get(0).getScore() > players.get(1).getScore()) {
 				fileName += "_0";
+				// send 66 instead of key to trigger logging
+				out.println("###Input 0");
+				out.println(66);
+				out.println("###Input 1");
+				out.println(66);
 				out.println("###End 0 1");
 			} else if (players.get(0).getScore() < players.get(1).getScore()) {
 				fileName += "_1";
+				// send 66 instead of key to trigger logging
+				out.println("###Input 0");
+				out.println(66);
+				out.println("###Input 1");
+				out.println(66);
 				out.println("###End 1 0");
 			} else {
 				fileName += "_2";
+				// send 66 instead of key to trigger logging
+				out.println("###Input 0");
+				out.println(66);
+				out.println("###Input 1");
+				out.println(66);
 				out.println("###End 01");
 			}
 		} finally {
-		    // send 66 instead of key to trigger logging
-            out.println("###Input 0");
-            out.println(66);
-            out.println("###Input 1");
-            out.println(66);
-			File f = new File("matchs/"+fileName);
+			File f = new File("/home/kevin/perso/run/matchs/"+fileName);
 			f.createNewFile();
 			in.close();
 		}
