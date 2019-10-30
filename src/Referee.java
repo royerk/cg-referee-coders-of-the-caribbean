@@ -662,7 +662,6 @@ class Referee {
 
 		long timestamp = System.currentTimeMillis();
 
-		// todo generate some random string
 		String key = timestamp + "";
 		String alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 		for (int i = 0; i < 5; i++) {
@@ -768,10 +767,6 @@ class Referee {
 
 				round += 1;
 			}
-
-			// todo create file with name key_winner (0/1)
-			
-			// todo send bot order to write to file
 
 			if (players.get(0).getScore() > players.get(1).getScore()) {
 				fileName += "_0";
