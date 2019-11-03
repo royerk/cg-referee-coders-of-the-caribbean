@@ -743,6 +743,7 @@ class Referee {
 						out.println(66);
 						out.println("###Input 1");
 						out.println(66);
+						Thread.sleep(500);
 						out.println("###End 0 1");
 					} else if (players.get(0).getScore() < players.get(1).getScore()) {
 						fileName += "_1";
@@ -751,6 +752,7 @@ class Referee {
 						out.println(66);
 						out.println("###Input 1");
 						out.println(66);
+						Thread.sleep(500);
 						out.println("###End 1 0");
 					} else {
 						fileName += "_2";
@@ -759,6 +761,7 @@ class Referee {
 						out.println(66);
 						out.println("###Input 1");
 						out.println(66);
+						Thread.sleep(500);
 						out.println("###End 01");
 					}
 
@@ -775,6 +778,7 @@ class Referee {
 				out.println(66);
 				out.println("###Input 1");
 				out.println(66);
+				Thread.sleep(500);
 				out.println("###End 0 1");
 			} else if (players.get(0).getScore() < players.get(1).getScore()) {
 				fileName += "_1";
@@ -783,6 +787,7 @@ class Referee {
 				out.println(66);
 				out.println("###Input 1");
 				out.println(66);
+				Thread.sleep(500);
 				out.println("###End 1 0");
 			} else {
 				fileName += "_2";
@@ -791,6 +796,7 @@ class Referee {
 				out.println(66);
 				out.println("###Input 1");
 				out.println(66);
+				Thread.sleep(500);
 				out.println("###End 01");
 			}
 		} finally {
