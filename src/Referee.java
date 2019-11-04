@@ -800,7 +800,7 @@ class Referee {
 				out.println("###End 01");
 			}
 		} finally {
-			File f = new File("/home/kevin/perso/train-to-cpp/CotC/matchs/"+fileName);
+			File f = new File("./CotC/matchs/"+fileName);
 			f.createNewFile();
 			in.close();
 		}
